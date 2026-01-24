@@ -1596,6 +1596,186 @@ func TestEval_issue_67(t *testing.T) {
 	}
 }
 
+// TestTernaryOperator tests the ternary operator (? :) functionality
+func TestTernaryOperator(t *testing.T) {
+	tests := []struct {
+		name     string
+		json     string
+		expr     string
+		expected interface{}
+		wantErr  bool
+	}{
+		// Basic true/false conditions
+		{
+			name:     "true condition returns first value",
+			json:     `{}`,
+			expr:     `true ? 1 : 2`,
+			expected: float64(1),
+		},
+		{
+			name:     "false condition returns second value",
+			json:     `{}`,
+			expr:     `false ? 1 : 2`,
+			expected: float64(2),
+		},
+		// Comparison as condition
+		{
+			name:     "greater than true",
+			json:     `{}`,
+			expr:     `5 > 3 ? "yes" : "no"`,
+			expected: "yes",
+		},
+		{
+			name:     "greater than false",
+			json:     `{}`,
+			expr:     `2 > 3 ? "yes" : "no"`,
+			expected: "no",
+		},
+		{
+			name:     "equality true",
+			json:     `{}`,
+			expr:     `5 == 5 ? "equal" : "not equal"`,
+			expected: "equal",
+		},
+		{
+			name:     "equality false",
+			json:     `{}`,
+			expr:     `5 == 6 ? "equal" : "not equal"`,
+			expected: "not equal",
+		},
+		// JSONPath in condition
+		{
+			name:     "jsonpath condition true",
+			json:     `{"value": 10}`,
+			expr:     `$.value > 5 ? "big" : "small"`,
+			expected: "big",
+		},
+		{
+			name:     "jsonpath condition false",
+			json:     `{"value": 3}`,
+			expr:     `$.value > 5 ? "big" : "small"`,
+			expected: "small",
+		},
+		// JSONPath in result values
+		{
+			name:     "jsonpath values - true branch",
+			json:     `{"flag": true, "a": 100, "b": 200}`,
+			expr:     `$.flag ? $.a : $.b`,
+			expected: float64(100),
+		},
+		{
+			name:     "jsonpath values - false branch",
+			json:     `{"flag": false, "a": 100, "b": 200}`,
+			expr:     `$.flag ? $.a : $.b`,
+			expected: float64(200),
+		},
+		// Complex expressions in values
+		{
+			name:     "expressions in values",
+			json:     `{}`,
+			expr:     `true ? 1 + 2 : 3 + 4`,
+			expected: float64(3),
+		},
+		{
+			name:     "expressions in values - false",
+			json:     `{}`,
+			expr:     `false ? 1 + 2 : 3 + 4`,
+			expected: float64(7),
+		},
+		// Numeric truthiness
+		{
+			name:     "numeric 1 is truthy",
+			json:     `{}`,
+			expr:     `1 ? "yes" : "no"`,
+			expected: "yes",
+		},
+		{
+			name:     "numeric 0 is falsy",
+			json:     `{}`,
+			expr:     `0 ? "yes" : "no"`,
+			expected: "no",
+		},
+		// String return values
+		{
+			name:     "string values",
+			json:     `{"name": "test"}`,
+			expr:     `$.name == "test" ? "matched" : "not matched"`,
+			expected: "matched",
+		},
+		// Nested ternary
+		{
+			name:     "nested ternary - first branch",
+			json:     `{"value": 10}`,
+			expr:     `$.value > 15 ? "large" : ($.value > 5 ? "medium" : "small")`,
+			expected: "medium",
+		},
+		{
+			name:     "nested ternary - innermost branch",
+			json:     `{"value": 3}`,
+			expr:     `$.value > 15 ? "large" : ($.value > 5 ? "medium" : "small")`,
+			expected: "small",
+		},
+		{
+			name:     "nested ternary - outermost branch",
+			json:     `{"value": 20}`,
+			expr:     `$.value > 15 ? "large" : ($.value > 5 ? "medium" : "small")`,
+			expected: "large",
+		},
+		// With array length
+		{
+			name:     "array length in condition",
+			json:     `{"items": [1, 2, 3]}`,
+			expr:     `length($.items) > 0 ? "has items" : "empty"`,
+			expected: "has items",
+		},
+		{
+			name:     "empty array in condition",
+			json:     `{"items": []}`,
+			expr:     `length($.items) > 0 ? "has items" : "empty"`,
+			expected: "empty",
+		},
+		// Use case: default value pattern
+		{
+			name:     "default value pattern - use provided",
+			json:     `{"namespace": "production", "default": "staging"}`,
+			expr:     `length($.namespace) > 0 ? $.namespace : $.default`,
+			expected: "production",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root, err := Unmarshal([]byte(tt.json))
+			if err != nil {
+				t.Fatalf("Unmarshal() error = %v", err)
+			}
+
+			result, err := Eval(root, tt.expr)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Eval() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				return
+			}
+			if result == nil {
+				t.Errorf("Eval() result is nil")
+				return
+			}
+
+			value, err := result.Value()
+			if err != nil {
+				t.Errorf("Value() error = %v", err)
+				return
+			}
+
+			if !reflect.DeepEqual(value, tt.expected) {
+				t.Errorf("Eval(%s) = %v (%T), want %v (%T)", tt.expr, value, value, tt.expected, tt.expected)
+			}
+		})
+	}
+}
+
 // TestEval_issue_69 is a test for https://github.com/spyzhov/ajson/issues/69
 func TestEval_issue_69(t *testing.T) {
 	root := Must(Unmarshal([]byte(`

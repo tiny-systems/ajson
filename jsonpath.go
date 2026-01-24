@@ -594,6 +594,7 @@ func eval(node *Node, expression rpn, cmd string) (result *Node, err error) {
 		temp     *Node
 		fn       Function
 		op       Operation
+		top      TernaryOperation
 		ok       bool
 		size     int
 		commands []string
@@ -609,6 +610,15 @@ func eval(node *Node, expression rpn, cmd string) (result *Node, err error) {
 			if err != nil {
 				return
 			}
+		} else if top, ok = ternaryOperations[exp]; ok {
+			if size < 3 {
+				return nil, errorRequest("wrong request: %s", cmd)
+			}
+			stack[size-3], err = top(stack[size-3], stack[size-2], stack[size-1])
+			if err != nil {
+				return
+			}
+			stack = stack[:size-2]
 		} else if op, ok = operations[exp]; ok {
 			if size < 2 {
 				return nil, errorRequest("wrong request: %s", cmd)

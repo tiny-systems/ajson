@@ -15,6 +15,9 @@ type Function func(node *Node) (result *Node, err error)
 // Operation - internal script operation of JSONPath
 type Operation func(left *Node, right *Node) (result *Node, err error)
 
+// TernaryOperation - ternary operation for condition ? trueVal : falseVal
+type TernaryOperation func(condition *Node, trueVal *Node, falseVal *Node) (result *Node, err error)
+
 var (
 	// Operator precedence
 	// From https://golang.org/ref/spec#Operator_precedence
@@ -73,6 +76,9 @@ var (
 		"=~": 3,
 		"&&": 2,
 		"||": 1,
+		"?":  1, // ternary operator start (same as lowest binary, lower than &&)
+		":":  1, // ternary operator separator
+		"?:": 1, // ternary operator combined (for stack drain)
 	}
 	priorityChar = map[byte]bool{
 		'*': true,
@@ -309,6 +315,48 @@ var (
 
 	randFunc    = rand.Float64
 	randIntFunc = rand.Intn
+
+	// ternaryOperations handles the ?: ternary operator
+	ternaryOperations = map[string]TernaryOperation{
+		"?:": func(condition *Node, trueVal *Node, falseVal *Node) (result *Node, err error) {
+			if condition == nil {
+				return falseVal, nil
+			}
+			cond, err := condition.GetBool()
+			if err != nil {
+				// For non-boolean, treat non-null/non-zero as true
+				if condition.IsNull() {
+					return falseVal, nil
+				}
+				if condition.IsNumeric() {
+					num, _ := condition.GetNumeric()
+					if num == 0 {
+						return falseVal, nil
+					}
+					return trueVal, nil
+				}
+				if condition.IsString() {
+					str, _ := condition.GetString()
+					if str == "" {
+						return falseVal, nil
+					}
+					return trueVal, nil
+				}
+				if condition.IsArray() {
+					if condition.Size() == 0 {
+						return falseVal, nil
+					}
+					return trueVal, nil
+				}
+				// Objects and other types are truthy
+				return trueVal, nil
+			}
+			if cond {
+				return trueVal, nil
+			}
+			return falseVal, nil
+		},
+	}
 
 	functions = map[string]Function{
 		"abs":         numericFunction("Abs", math.Abs),

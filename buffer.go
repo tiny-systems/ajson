@@ -383,6 +383,9 @@ func (b *buffer) rpn() (result rpn, err error) {
 					found = false
 					if temp[0] >= 'A' && temp[0] <= 'z' { // function
 						found = true
+					} else if temp == "?" || temp == "?:" {
+						// Don't pop ternary operators for regular operators
+						break
 					} else if priority[temp] != 0 { // operation
 						if priority[temp] > priority[current] {
 							found = true
@@ -462,6 +465,49 @@ func (b *buffer) rpn() (result rpn, err error) {
 			if !found { // have no parenthesesL
 				return nil, errorRequest("formula has no left parentheses")
 			}
+		case c == question: // ? - ternary operator start
+			if !variable {
+				return nil, b.errorSymbol()
+			}
+			variable = false
+			// Pop higher priority operators before pushing '?'
+			for len(stack) > 0 {
+				temp = stack[len(stack)-1]
+				if temp == "(" || temp == "?" {
+					break
+				}
+				// Pop all operators since '?' has lowest priority
+				stack = stack[:len(stack)-1]
+				result = append(result, temp)
+			}
+			stack = append(stack, "?")
+		case c == colon: // : - ternary operator separator (or could be slice, handled elsewhere)
+			if !variable {
+				return nil, b.errorSymbol()
+			}
+			variable = false
+			// Check if there's a '?' on the stack (ternary context)
+			hasQuestion := false
+			for i := len(stack) - 1; i >= 0; i-- {
+				if stack[i] == "?" {
+					hasQuestion = true
+					break
+				}
+			}
+			if !hasQuestion {
+				return nil, b.errorSymbol()
+			}
+			// Pop operators until we find "?"
+			for len(stack) > 0 {
+				temp = stack[len(stack)-1]
+				stack = stack[:len(stack)-1]
+				if temp == "?" {
+					break
+				}
+				result = append(result, temp)
+			}
+			// Push the combined ternary operator
+			stack = append(stack, "?:")
 		default: // prefix functions or etc.
 			start = b.index
 			variable = true
