@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/spyzhov/ajson"
+	"github.com/tiny-systems/ajson"
 )
 
 var version = "v0.9.4"
@@ -37,7 +37,7 @@ Examples:
 	} else if inArgs("version", "-version", "--version") {
 		text = fmt.Sprintf(`ajson: Version %s
 Copyright (c) 2020 Pyzhov Stepan
-MIT License <https://github.com/spyzhov/ajson/blob/master/LICENSE>
+MIT License <https://github.com/tiny-systems/ajson/blob/master/LICENSE>
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law.`, version)
 	}

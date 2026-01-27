@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	. "github.com/spyzhov/ajson/internal"
+	. "github.com/tiny-systems/ajson/internal"
 )
 
 type buffer struct {
