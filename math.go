@@ -9,8 +9,11 @@ import (
 	"strings"
 )
 
-// Function - internal left function of JSONPath
+// Function - internal single-argument function of JSONPath
 type Function func(node *Node) (result *Node, err error)
+
+// MultiArgFunction - internal multi-argument function of JSONPath
+type MultiArgFunction func(args []*Node) (result *Node, err error)
 
 // Operation - internal script operation of JSONPath
 type Operation func(left *Node, right *Node) (result *Node, err error)
@@ -620,6 +623,51 @@ var (
 			}
 			return valueNode(nil, "key", Null, nil), nil
 		},
+		// String functions (single argument)
+		"upper": func(node *Node) (result *Node, err error) {
+			if node == nil {
+				return valueNode(nil, "upper", Null, nil), nil
+			}
+			str, err := node.GetString()
+			if err != nil {
+				return nil, errorRequest("upper requires a string argument")
+			}
+			return valueNode(nil, "upper", String, strings.ToUpper(str)), nil
+		},
+		"lower": func(node *Node) (result *Node, err error) {
+			if node == nil {
+				return valueNode(nil, "lower", Null, nil), nil
+			}
+			str, err := node.GetString()
+			if err != nil {
+				return nil, errorRequest("lower requires a string argument")
+			}
+			return valueNode(nil, "lower", String, strings.ToLower(str)), nil
+		},
+		"trim": func(node *Node) (result *Node, err error) {
+			if node == nil {
+				return valueNode(nil, "trim", Null, nil), nil
+			}
+			str, err := node.GetString()
+			if err != nil {
+				return nil, errorRequest("trim requires a string argument")
+			}
+			return valueNode(nil, "trim", String, strings.TrimSpace(str)), nil
+		},
+		"reverse": func(node *Node) (result *Node, err error) {
+			if node == nil {
+				return valueNode(nil, "reverse", Null, nil), nil
+			}
+			str, err := node.GetString()
+			if err != nil {
+				return nil, errorRequest("reverse requires a string argument")
+			}
+			runes := []rune(str)
+			for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+				runes[i], runes[j] = runes[j], runes[i]
+			}
+			return valueNode(nil, "reverse", String, string(runes)), nil
+		},
 	}
 
 	constants = map[string]*Node{
@@ -641,11 +689,182 @@ var (
 		"false": valueNode(nil, "false", Bool, false),
 		"null":  valueNode(nil, "null", Null, nil),
 	}
+
+	// multiArgFunctions holds functions that accept multiple arguments
+	// Called as funcname(arg1, arg2, ...) and stored in RPN as "funcname#N" where N is arg count
+	multiArgFunctions = map[string]MultiArgFunction{
+		"split": func(args []*Node) (result *Node, err error) {
+			if len(args) < 2 {
+				return nil, errorRequest("split requires 2 arguments: split(string, separator)")
+			}
+			str, err := args[0].GetString()
+			if err != nil {
+				return nil, errorRequest("split: first argument must be a string")
+			}
+			sep, err := args[1].GetString()
+			if err != nil {
+				return nil, errorRequest("split: second argument must be a string")
+			}
+			parts := strings.Split(str, sep)
+			nodes := make([]*Node, len(parts))
+			for i, part := range parts {
+				nodes[i] = valueNode(nil, "", String, part)
+			}
+			return ArrayNode("split", nodes), nil
+		},
+		"join": func(args []*Node) (result *Node, err error) {
+			if len(args) < 2 {
+				return nil, errorRequest("join requires 2 arguments: join(array, separator)")
+			}
+			if !args[0].IsArray() {
+				return nil, errorRequest("join: first argument must be an array")
+			}
+			sep, err := args[1].GetString()
+			if err != nil {
+				return nil, errorRequest("join: second argument must be a string")
+			}
+			arr := args[0].Inheritors()
+			parts := make([]string, len(arr))
+			for i, node := range arr {
+				s, err := node.GetString()
+				if err != nil {
+					return nil, errorRequest("join: array elements must be strings")
+				}
+				parts[i] = s
+			}
+			return valueNode(nil, "join", String, strings.Join(parts, sep)), nil
+		},
+		"contains": func(args []*Node) (result *Node, err error) {
+			if len(args) < 2 {
+				return nil, errorRequest("contains requires 2 arguments: contains(string, substring)")
+			}
+			str, err := args[0].GetString()
+			if err != nil {
+				return nil, errorRequest("contains: first argument must be a string")
+			}
+			substr, err := args[1].GetString()
+			if err != nil {
+				return nil, errorRequest("contains: second argument must be a string")
+			}
+			return valueNode(nil, "contains", Bool, strings.Contains(str, substr)), nil
+		},
+		"hasprefix": func(args []*Node) (result *Node, err error) {
+			if len(args) < 2 {
+				return nil, errorRequest("hasprefix requires 2 arguments: hasprefix(string, prefix)")
+			}
+			str, err := args[0].GetString()
+			if err != nil {
+				return nil, errorRequest("hasprefix: first argument must be a string")
+			}
+			prefix, err := args[1].GetString()
+			if err != nil {
+				return nil, errorRequest("hasprefix: second argument must be a string")
+			}
+			return valueNode(nil, "hasprefix", Bool, strings.HasPrefix(str, prefix)), nil
+		},
+		"hassuffix": func(args []*Node) (result *Node, err error) {
+			if len(args) < 2 {
+				return nil, errorRequest("hassuffix requires 2 arguments: hassuffix(string, suffix)")
+			}
+			str, err := args[0].GetString()
+			if err != nil {
+				return nil, errorRequest("hassuffix: first argument must be a string")
+			}
+			suffix, err := args[1].GetString()
+			if err != nil {
+				return nil, errorRequest("hassuffix: second argument must be a string")
+			}
+			return valueNode(nil, "hassuffix", Bool, strings.HasSuffix(str, suffix)), nil
+		},
+		"replace": func(args []*Node) (result *Node, err error) {
+			if len(args) < 3 {
+				return nil, errorRequest("replace requires 3 arguments: replace(string, old, new)")
+			}
+			str, err := args[0].GetString()
+			if err != nil {
+				return nil, errorRequest("replace: first argument must be a string")
+			}
+			old, err := args[1].GetString()
+			if err != nil {
+				return nil, errorRequest("replace: second argument must be a string")
+			}
+			newStr, err := args[2].GetString()
+			if err != nil {
+				return nil, errorRequest("replace: third argument must be a string")
+			}
+			return valueNode(nil, "replace", String, strings.ReplaceAll(str, old, newStr)), nil
+		},
+		"substr": func(args []*Node) (result *Node, err error) {
+			if len(args) < 2 {
+				return nil, errorRequest("substr requires 2-3 arguments: substr(string, start[, length])")
+			}
+			str, err := args[0].GetString()
+			if err != nil {
+				return nil, errorRequest("substr: first argument must be a string")
+			}
+			start, err := args[1].getInteger()
+			if err != nil {
+				return nil, errorRequest("substr: second argument must be an integer")
+			}
+			if start < 0 {
+				start = len(str) + start
+			}
+			if start < 0 {
+				start = 0
+			}
+			if start >= len(str) {
+				return valueNode(nil, "substr", String, ""), nil
+			}
+			end := len(str)
+			if len(args) >= 3 {
+				length, err := args[2].getInteger()
+				if err != nil {
+					return nil, errorRequest("substr: third argument must be an integer")
+				}
+				end = start + length
+				if end > len(str) {
+					end = len(str)
+				}
+			}
+			return valueNode(nil, "substr", String, str[start:end]), nil
+		},
+		"index": func(args []*Node) (result *Node, err error) {
+			if len(args) < 2 {
+				return nil, errorRequest("index requires 2 arguments: index(string, substring)")
+			}
+			str, err := args[0].GetString()
+			if err != nil {
+				return nil, errorRequest("index: first argument must be a string")
+			}
+			substr, err := args[1].GetString()
+			if err != nil {
+				return nil, errorRequest("index: second argument must be a string")
+			}
+			return valueNode(nil, "index", Numeric, float64(strings.Index(str, substr))), nil
+		},
+	}
 )
 
-// AddFunction add a function for internal JSONPath script
+// AddFunction add a single-argument function for internal JSONPath script
 func AddFunction(alias string, function Function) {
 	functions[strings.ToLower(alias)] = function
+}
+
+// AddMultiArgFunction add a multi-argument function for internal JSONPath script
+func AddMultiArgFunction(alias string, function MultiArgFunction) {
+	multiArgFunctions[strings.ToLower(alias)] = function
+}
+
+// IsMultiArgFunction checks if a function name is a multi-argument function
+func IsMultiArgFunction(name string) bool {
+	_, ok := multiArgFunctions[strings.ToLower(name)]
+	return ok
+}
+
+// GetMultiArgFunction returns a multi-argument function by name
+func GetMultiArgFunction(name string) (MultiArgFunction, bool) {
+	fn, ok := multiArgFunctions[strings.ToLower(name)]
+	return fn, ok
 }
 
 // AddOperation add an operation for internal JSONPath script

@@ -2,6 +2,7 @@ package ajson
 
 import (
 	"io"
+	"strconv"
 	"strings"
 
 	. "github.com/spyzhov/ajson/internal"
@@ -351,16 +352,23 @@ tokenLoop:
 	return nil
 }
 
+// funcCallInfo tracks function call context for multi-arg functions
+type funcCallInfo struct {
+	name     string
+	argCount int
+}
+
 // Builder for `Reverse Polish notation`
 func (b *buffer) rpn() (result rpn, err error) {
 	var (
-		c        byte
-		start    int
-		temp     string
-		current  string
-		found    bool
-		variable bool
-		stack    = make([]string, 0)
+		c         byte
+		start     int
+		temp      string
+		current   string
+		found     bool
+		variable  bool
+		stack     = make([]string, 0)
+		funcStack = make([]funcCallInfo, 0) // track function calls for arg counting
 	)
 	for {
 		b.reset()
@@ -381,7 +389,7 @@ func (b *buffer) rpn() (result rpn, err error) {
 				for len(stack) > 0 {
 					temp = stack[len(stack)-1]
 					found = false
-					if temp[0] >= 'A' && temp[0] <= 'z' { // function
+					if temp[0] >= 'A' && temp[0] <= 'z' && !strings.HasPrefix(temp, "(func:") { // function (but not func marker)
 						found = true
 					} else if temp == "?" || temp == "?:" {
 						// Don't pop ternary operators for regular operators
@@ -458,6 +466,25 @@ func (b *buffer) rpn() (result rpn, err error) {
 				stack = stack[:len(stack)-1]
 				if temp == "(" {
 					found = true
+					// Check if this closes a function call
+					if len(stack) > 0 {
+						top := stack[len(stack)-1]
+						if strings.HasPrefix(top, "(func:") {
+							// Pop the function marker
+							stack = stack[:len(stack)-1]
+							funcName := top[6:] // remove "(func:" prefix
+							if len(funcStack) > 0 {
+								info := funcStack[len(funcStack)-1]
+								funcStack = funcStack[:len(funcStack)-1]
+								// Emit function with arg count: funcname#N
+								result = append(result, funcName+"#"+strconv.Itoa(info.argCount))
+							}
+						} else if top[0] >= 'A' && top[0] <= 'z' {
+							// Single-arg function
+							stack = stack[:len(stack)-1]
+							result = append(result, top)
+						}
+					}
 					break
 				}
 				result = append(result, temp)
@@ -465,6 +492,21 @@ func (b *buffer) rpn() (result rpn, err error) {
 			if !found { // have no parenthesesL
 				return nil, errorRequest("formula has no left parentheses")
 			}
+		case c == coma: // , - argument separator for multi-arg functions
+			// Pop operators until we find "(" (function call boundary)
+			for len(stack) > 0 {
+				temp = stack[len(stack)-1]
+				if temp == "(" {
+					break
+				}
+				stack = stack[:len(stack)-1]
+				result = append(result, temp)
+			}
+			// Increment arg count for current function
+			if len(funcStack) > 0 {
+				funcStack[len(funcStack)-1].argCount++
+			}
+			variable = false
 		case c == question: // ? - ternary operator start
 			if !variable {
 				return nil, b.errorSymbol()
@@ -473,7 +515,7 @@ func (b *buffer) rpn() (result rpn, err error) {
 			// Pop higher priority operators before pushing '?'
 			for len(stack) > 0 {
 				temp = stack[len(stack)-1]
-				if temp == "(" || temp == "?" {
+				if temp == "(" || temp == "?" || strings.HasPrefix(temp, "(func:") {
 					break
 				}
 				// Pop all operators since '?' has lowest priority
@@ -526,10 +568,17 @@ func (b *buffer) rpn() (result rpn, err error) {
 			current = strings.ToLower(string(b.data[start:b.index]))
 			b.index--
 			if !variable {
-				if _, found = functions[current]; !found {
+				// Check if it's a multi-arg function
+				if IsMultiArgFunction(current) {
+					// Push a marker for multi-arg function
+					stack = append(stack, "(func:"+current)
+					funcStack = append(funcStack, funcCallInfo{name: current, argCount: 1})
+				} else if _, found = functions[current]; found {
+					// Single-arg function
+					stack = append(stack, current)
+				} else {
 					return nil, errorRequest("wrong formula, '%s' is not a function", current)
 				}
-				stack = append(stack, current)
 			} else {
 				if _, found = constants[current]; !found {
 					return nil, errorRequest("wrong formula, '%s' is not a constant", current)
@@ -549,7 +598,8 @@ func (b *buffer) rpn() (result rpn, err error) {
 	for len(stack) > 0 {
 		temp = stack[len(stack)-1]
 		_, ok := functions[temp]
-		if priority[temp] == 0 && !ok { // operations only
+		_, okMulti := multiArgFunctions[temp]
+		if priority[temp] == 0 && !ok && !okMulti && !strings.HasPrefix(temp, "(func:") { // operations only
 			return nil, errorRequest("wrong formula, '%s' is not an operation or function", temp)
 		}
 		result = append(result, temp)

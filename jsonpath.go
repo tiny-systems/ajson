@@ -593,6 +593,7 @@ func eval(node *Node, expression rpn, cmd string) (result *Node, err error) {
 		slice    []*Node
 		temp     *Node
 		fn       Function
+		mfn      MultiArgFunction
 		op       Operation
 		top      TernaryOperation
 		ok       bool
@@ -602,6 +603,30 @@ func eval(node *Node, expression rpn, cmd string) (result *Node, err error) {
 	)
 	for _, exp := range expression {
 		size = len(stack)
+		// Check for multi-arg function (format: funcname#N)
+		if idx := strings.Index(exp, "#"); idx > 0 {
+			funcName := exp[:idx]
+			argCountStr := exp[idx+1:]
+			argCount, parseErr := strconv.Atoi(argCountStr)
+			if parseErr == nil {
+				if mfn, ok = GetMultiArgFunction(funcName); ok {
+					if size < argCount {
+						return nil, errorRequest("wrong request: %s (need %d args, have %d)", cmd, argCount, size)
+					}
+					args := make([]*Node, argCount)
+					for i := 0; i < argCount; i++ {
+						args[i] = stack[size-argCount+i]
+					}
+					stack = stack[:size-argCount]
+					temp, err = mfn(args)
+					if err != nil {
+						return nil, err
+					}
+					stack = append(stack, temp)
+					continue
+				}
+			}
+		}
 		if fn, ok = functions[exp]; ok {
 			if size < 1 {
 				return nil, errorRequest("wrong request: %s", cmd)

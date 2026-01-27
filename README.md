@@ -295,6 +295,8 @@ JSON: {"name":"Foo","mail":"foo@example.com"}
 
 Package has several predefined functions.
 
+#### Math Functions
+
     abs          math.Abs           integers, floats
     acos         math.Acos          integers, floats
     acosh        math.Acosh         integers, floats
@@ -302,10 +304,6 @@ Package has several predefined functions.
     asinh        math.Asinh         integers, floats
     atan         math.Atan          integers, floats
     atanh        math.Atanh         integers, floats
-    avg          Average            array of integers or floats
-    b64decode    b64 Decoding       string
-    b64encode    b64 Encoding       string 
-    b64encoden   b64 Encoding (no padding)    string
     cbrt         math.Cbrt          integers, floats
     ceil         math.Ceil          integers, floats
     cos          math.Cos           integers, floats
@@ -318,37 +316,99 @@ Package has several predefined functions.
     exp2         math.Exp2          integers, floats
     expm1        math.Expm1         integers, floats
     factorial    N!                 unsigned integer
-    first        Get first element  any
     floor        math.Floor         integers, floats
     gamma        math.Gamma         integers, floats
     j0           math.J0            integers, floats
     j1           math.J1            integers, floats
-    key          Key of element     string
-    last         Get last element   any
-    length       Length of array    array, string
     log          math.Log           integers, floats
     log10        math.Log10         integers, floats
     log1p        math.Log1p         integers, floats
     log2         math.Log2          integers, floats
     logb         math.Logb          integers, floats
-    not          not                any
-    parent       Get parent element any
     pow10        math.Pow10         integer
     rand         N*rand.Float64     float
     randint      rand.Intn          integer
-    root         Get root element   any
     round        math.Round         integers, floats
     roundtoeven  math.RoundToEven   integers, floats
     sin          math.Sin           integers, floats
     sinh         math.Sinh          integers, floats
-    size         Count of elements  array, object
-    sum          Sum                array of integers or floats
     sqrt         math.Sqrt          integers, floats
     tan          math.Tan           integers, floats
     tanh         math.Tanh          integers, floats
     trunc        math.Trunc         integers, floats
     y0           math.Y0            integers, floats
     y1           math.Y1            integers, floats
+
+#### Array/Object Functions
+
+    avg          Average            array of integers or floats
+    first        Get first element  array
+    last         Get last element   array
+    length       Length             array, string
+    size         Count of elements  array, object
+    sum          Sum                array of integers or floats
+
+#### String Functions (Single Argument)
+
+    b64decode    Base64 decode      string
+    b64encode    Base64 encode      string
+    b64encoden   Base64 encode (no padding)  string
+    lower        Convert to lowercase        string
+    reverse      Reverse string              string
+    trim         Trim whitespace             string
+    upper        Convert to uppercase        string
+
+#### String Functions (Multi-Argument)
+
+    contains(string, substring)           Check if string contains substring  → bool
+    hasprefix(string, prefix)             Check if string starts with prefix  → bool
+    hassuffix(string, suffix)             Check if string ends with suffix    → bool
+    index(string, substring)              Find position of substring (-1 if not found) → int
+    join(array, separator)                Join array elements into string     → string
+    replace(string, old, new)             Replace all occurrences             → string
+    split(string, separator)              Split string into array             → array
+    substr(string, start[, length])       Extract substring                   → string
+
+#### Utility Functions
+
+    key          Key of element     string
+    not          Logical not        any
+    parent       Get parent element any
+    root         Get root element   any
+
+#### String Function Examples
+
+```go
+// Split and get first element
+first(split('deployment/nginx', '/'))  // Returns: "deployment"
+
+// Check if string contains a substring
+contains('hello world', 'world')  // Returns: true
+
+// Replace all occurrences
+replace('foo foo foo', 'foo', 'bar')  // Returns: "bar bar bar"
+
+// Extract substring
+substr('hello', 2)      // Returns: "llo"
+substr('hello', 1, 3)   // Returns: "ell"
+
+// Convert case
+upper('hello')  // Returns: "HELLO"
+lower('HELLO')  // Returns: "hello"
+
+// Check prefix/suffix
+hasprefix('hello world', 'hello')  // Returns: true
+hassuffix('hello world', 'world')  // Returns: true
+
+// Find index
+index('hello', 'l')  // Returns: 2
+
+// Join array
+join(split('a,b,c', ','), '-')  // Returns: "a-b-c"
+
+// Combine with ternary operator
+contains($.error, 'NotFound') ? 'missing' : 'error'
+```
 
 You are free to add new one with function `AddFunction`:
 
